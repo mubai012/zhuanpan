@@ -40,24 +40,206 @@ document.addEventListener('DOMContentLoaded', function() {
         '#6c5ce7'  // 紫罗兰色
     ];
     
-    // 从localStorage加载食物数据
+    // 从LeanCloud加载食物数据
     function loadFoodData() {
-        const savedFoods = localStorage.getItem('foodItems');
-        if (savedFoods) {
-            return JSON.parse(savedFoods);
-        } else {
-            // 如果没有保存的数据，返回默认食物列表
-            const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
-            saveFoodData(defaultFoods); // 保存默认数据
-            return defaultFoods;
+        return new Promise((resolve, reject) => {
+            try {
+                // 检查LeanCloud是否初始化
+                if (!window.AV) {
+                    // 如果LeanCloud不可用，回退到localStorage
+                    const savedFoods = localStorage.getItem('foodItems');
+                    if (savedFoods) {
+                        resolve(JSON.parse(savedFoods));
+                    } else {
+                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                        saveFoodData(defaultFoods);
+                        resolve(defaultFoods);
+                    }
+                    return;
+                }
+                
+                // 创建数据查询
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                query.descending('updatedAt'); // 按更新时间排序，获取最新数据
+                query.limit(1);
+                
+                // 从LeanCloud查询数据
+                query.find().then(results => {
+                    if (results.length > 0) {
+                        const foodList = results[0];
+                        const foodItems = foodList.get('items');
+                        if (foodItems && Array.isArray(foodItems)) {
+                            resolve(foodItems);
+                        } else {
+                            const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                            saveFoodData(defaultFoods);
+                            resolve(defaultFoods);
+                        }
+                    } else {
+                        // 如果没有数据，创建默认数据
+                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                        saveFoodData(defaultFoods);
+                        resolve(defaultFoods);
+                    }
+                }).catch(error => {
+                    console.error('加载数据失败:', error);
+                    // 发生错误时回退到localStorage
+                    const savedFoods = localStorage.getItem('foodItems');
+                    if (savedFoods) {
+                        resolve(JSON.parse(savedFoods));
+                    } else {
+                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                        saveFoodData(defaultFoods);
+                        resolve(defaultFoods);
+                    }
+                });
+            } catch (error) {
+                console.error('加载数据异常:', error);
+                // 发生异常时回退到localStorage
+                const savedFoods = localStorage.getItem('foodItems');
+                if (savedFoods) {
+                    resolve(JSON.parse(savedFoods));
+                } else {
+                    const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                    saveFoodData(defaultFoods);
+                    resolve(defaultFoods);
+                }
+            }
+        });
+    }
+    
+    // 保存食物数据到LeanCloud
+    function saveFoodData(foods) {
+        try {
+            // 同时保存到localStorage作为备份
+            localStorage.setItem('foodItems', JSON.stringify(foods));
+            
+            // 检查LeanCloud是否初始化
+            if (window.AV) {
+                // 创建或更新食物列表
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                query.limit(1);
+                
+                query.find().then(results => {
+                    let foodList;
+                    if (results.length > 0) {
+                        // 如果已存在数据，更新它
+                        foodList = results[0];
+                    } else {
+                        // 如果不存在数据，创建新的
+                        foodList = new FoodList();
+                    }
+                    
+                    // 设置食物列表数据
+                    foodList.set('items', foods);
+                    
+                    // 保存到LeanCloud
+                    foodList.save().catch(error => {
+                        console.error('保存数据失败:', error);
+                    });
+                }).catch(error => {
+                    console.error('查询数据失败:', error);
+                });
+            }
+        } catch (error) {
+            console.error('保存数据异常:', error);
         }
     }
     
-    // 保存食物数据到localStorage
-    function saveFoodData(foods) {
-        localStorage.setItem('foodItems', JSON.stringify(foods));
+    // 添加数据变更监听器，实时同步云端数据
+    function setupDataSync() {
+        try {
+            if (!window.AV) return;
+            
+            // 记录上次同步的时间戳
+            let lastSyncTimestamp = new Date().getTime();
+            
+            // 轮询检查云端数据变更（每5秒检查一次）
+            setInterval(() => {
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                query.descending('updatedAt');
+                query.limit(1);
+                
+                query.find().then(results => {
+                    if (results.length > 0) {
+                        const foodList = results[0];
+                        const updatedAt = foodList.get('updatedAt').getTime();
+                        
+                        // 只有当数据有更新时才同步
+                        if (updatedAt > lastSyncTimestamp) {
+                            lastSyncTimestamp = updatedAt;
+                            
+                            const foodItems = foodList.get('items');
+                            if (foodItems && Array.isArray(foodItems)) {
+                                // 比较本地数据与云端数据是否不同
+                                const currentFoods = Array.from(document.querySelectorAll('.wheel-segment')).map(segment => {
+                                    return segment.querySelector('span').textContent;
+                                });
+                                
+                                // 检查数组内容是否相同
+                                if (foodItems.length !== currentFoods.length || 
+                                    !foodItems.every((food, index) => food === currentFoods[index])) {
+                                    // 如果数据不同，更新转盘
+                                    recreateWheelSegments(foodItems);
+                                    initWheel();
+                                    // 也更新localStorage
+                                    localStorage.setItem('foodItems', JSON.stringify(foodItems));
+                                }
+                            }
+                        }
+                    }
+                }).catch(error => {
+                    console.error('同步数据失败:', error);
+                });
+            }, 5000); // 每5秒检查一次
+        } catch (error) {
+            console.error('设置数据同步异常:', error);
+        }
     }
     
+    // 修改初始化函数
+    function initApp() {
+        try {
+            if (window.AV) {
+                loadFoodData()
+                    .then(savedFoods => {
+                        recreateWheelSegments(savedFoods);
+                        initWheel();
+                        setupDataSync(); // 设置数据同步
+                    })
+                    .catch(error => {
+                        console.error('加载数据失败:', error);
+                        // 回退到默认数据
+                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                        recreateWheelSegments(defaultFoods);
+                        initWheel();
+                    });
+            } else {
+                // 如果LeanCloud未初始化，使用localStorage
+                setTimeout(() => {
+                    const savedFoods = localStorage.getItem('foodItems');
+                    if (savedFoods) {
+                        recreateWheelSegments(JSON.parse(savedFoods));
+                    } else {
+                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+                        recreateWheelSegments(defaultFoods);
+                        localStorage.setItem('foodItems', JSON.stringify(defaultFoods));
+                    }
+                    initWheel();
+                }, 0);
+            }
+        } catch (error) {
+            console.error('应用初始化异常:', error);
+            const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+            recreateWheelSegments(defaultFoods);
+            initWheel();
+        }
+    }
+    
+    // 修改DOMContentLoaded事件监听器
     // 重新创建转盘的所有扇形
     function recreateWheelSegments(foods) {
         // 先清除现有的扇形（除了中心元素）
