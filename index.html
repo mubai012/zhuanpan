@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天吃什么 - 美食转盘</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="main-content">
+        <!-- 主容器 -->
+        <div class="container">
+            <h1>今天吃什么?</h1>
+            
+            <div class="wheel-container">
+                <div class="wheel">
+                    <!-- 转盘扇形 - 初始食物选项 -->
+                    <div class="wheel-segment">
+                        <span>火锅</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>烧烤</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>炒菜</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>汉堡</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>寿司</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>麻辣烫</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>串</span>
+                    </div>
+                    <div class="wheel-segment">
+                        <span>方便面</span>
+                    </div>
+                    
+                    <!-- 转盘中心 -->
+                    <div class="wheel-center"></div>
+                </div>
+                <!-- 指针 -->
+                <div class="pointer"></div>
+            </div>
+            
+            <!-- 控制按钮 -->
+            <button id="spin-btn">开始转盘</button>
+            <button id="add-food-btn">添加食物</button>
+            <button id="delete-food-btn">删除食物</button>
+            
+            <!-- 结果显示 -->
+            <div id="result-text">点击开始按钮转动转盘</div>
+            
+            <!-- 添加食物模态框 -->
+            <div id="modal" class="modal">
+                <div class="modal-content">
+                    <span class="close">&times;</span>
+                    <h2>添加新食物</h2>
+                    <input type="text" id="food-input" placeholder="请输入食物名称">
+                    <button id="confirm-add">确认添加</button>
+                </div>
+            </div>
+            
+            <!-- 删除食物模态框 -->
+            <div id="delete-modal" class="modal">
+                <div class="modal-content">
+                    <span class="delete-close">&times;</span>
+                    <h2>删除食物</h2>
+                    <div id="food-list"></div>
+                    <button id="confirm-delete" disabled>确认删除</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧颜色-文字对应显示区域 -->
+        <div class="color-text-sidebar">
+            <h3>颜色对应食物</h3>
+            <div id="color-text-container"></div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
