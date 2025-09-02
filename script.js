@@ -615,8 +615,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 初始化数据和转盘
-    const savedFoods = loadFoodData();
-    recreateWheelSegments(savedFoods);
-    let { segments, segmentCount, segmentAngle } = initWheel();
-});
+    // 修改初始化数据和转盘的代码
+    // 初始化数据和转盘（修复后的代码）
+    loadFoodData().then(savedFoods => {
+        recreateWheelSegments(savedFoods);
+        let { segments, segmentCount, segmentAngle } = initWheel();
+        // 如果使用LeanCloud，设置数据同步
+        if (window.AV) {
+            setupDataSync();
+        }
+    }).catch(error => {
+        console.error('加载数据失败:', error);
+        // 发生错误时使用默认数据
+        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+        recreateWheelSegments(defaultFoods);
+        initWheel();
+    });
+})
