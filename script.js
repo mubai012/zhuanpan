@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (results.length > 0) {
                         // 如果存在数据，更新现有数据
                         const foodData = results[0];
-                        foodData.set('foods', foods);
+                        foodData.set('foods', foods); // 确保直接设置foods数组，而不是嵌套对象
                         foodData.save().then(() => {
                             console.log('数据已成功更新到LeanCloud');
                         }).catch(error => {
@@ -163,7 +163,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         // 如果不存在数据，创建新数据
                         const foodData = new FoodList();
-                        foodData.set('foods', foods);
+                        foodData.set('foods', foods); // 确保直接设置foods数组
+                        // 确保设置正确的权限
+                        const acl = new AV.ACL();
+                        acl.setPublicReadAccess(true);
+                        acl.setPublicWriteAccess(true);
+                        foodData.setACL(acl);
                         foodData.save().then(() => {
                             console.log('数据已成功保存到LeanCloud');
                         }).catch(error => {
@@ -175,7 +180,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('查询LeanCloud数据失败:', error);
                     // 尝试直接创建新数据
                     const foodData = new FoodList();
-                    foodData.set('foods', foods);
+                    foodData.set('foods', foods); // 确保直接设置foods数组
+                    // 确保设置正确的权限
+                    const acl = new AV.ACL();
+                    acl.setPublicReadAccess(true);
+                    acl.setPublicWriteAccess(true);
+                    foodData.setACL(acl);
                     foodData.save().then(() => {
                         console.log('数据已成功保存到LeanCloud');
                     }).catch(error => {
