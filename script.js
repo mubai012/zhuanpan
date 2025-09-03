@@ -134,6 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 保存食物数据到localStorage和LeanCloud
+    // 在saveFoodData函数中添加UI错误显示
     function saveFoodData(foods) {
         try {
             // 保存到localStorage
@@ -153,17 +154,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (results.length > 0) {
                         // 如果存在数据，更新现有数据
                         const foodData = results[0];
-                        foodData.set('foods', foods); // 确保直接设置foods数组，而不是嵌套对象
+                        foodData.set('foods', foods);
                         foodData.save().then(() => {
                             console.log('数据已成功更新到LeanCloud');
+                            resultText.textContent = '数据已成功保存';
                         }).catch(error => {
                             console.error('更新LeanCloud数据失败:', error);
+                            // 在UI上显示错误信息
+                            resultText.textContent = '云存储更新失败: ' + error.message;
                             // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
                         });
                     } else {
                         // 如果不存在数据，创建新数据
                         const foodData = new FoodList();
-                        foodData.set('foods', foods); // 确保直接设置foods数组
+                        foodData.set('foods', foods);
                         // 确保设置正确的权限
                         const acl = new AV.ACL();
                         acl.setPublicReadAccess(true);
@@ -171,8 +175,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         foodData.setACL(acl);
                         foodData.save().then(() => {
                             console.log('数据已成功保存到LeanCloud');
+                            resultText.textContent = '数据已成功保存';
                         }).catch(error => {
                             console.error('保存LeanCloud数据失败:', error);
+                            // 在UI上显示错误信息
+                            resultText.textContent = '云存储保存失败: ' + error.message;
                             // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
                         });
                     }
@@ -180,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('查询LeanCloud数据失败:', error);
                     // 尝试直接创建新数据
                     const foodData = new FoodList();
-                    foodData.set('foods', foods); // 确保直接设置foods数组
+                    foodData.set('foods', foods);
                     // 确保设置正确的权限
                     const acl = new AV.ACL();
                     acl.setPublicReadAccess(true);
@@ -188,13 +195,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     foodData.setACL(acl);
                     foodData.save().then(() => {
                         console.log('数据已成功保存到LeanCloud');
+                        resultText.textContent = '数据已成功保存';
                     }).catch(error => {
                         console.error('保存LeanCloud数据失败:', error);
+                        // 在UI上显示错误信息
+                        resultText.textContent = '云存储保存失败: ' + error.message;
                         // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
                     });
                 });
             } catch (cloudError) {
                 console.error('LeanCloud保存异常:', cloudError);
+                // 在UI上显示错误信息
+                resultText.textContent = '云存储异常: ' + cloudError.message;
                 // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
             }
         } catch (error) {
@@ -229,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 获取所有扇形
         const segments = document.querySelectorAll('.wheel-segment');
+        const segmentCount = segments.length;
         
         // 为每个扇形创建一个对应的颜色-文字显示项
         segments.forEach((segment, index) => {
@@ -236,7 +249,9 @@ document.addEventListener('DOMContentLoaded', function() {
                          segment.querySelector('span').textContent : 
                          segment.textContent;
             
-            const colorIndex = index % colors.length;
+            // 使用与initWheel相同的颜色分配算法
+            const step = Math.max(1, Math.floor(colors.length / segmentCount));
+            const colorIndex = (index * step) % colors.length;
             const color = colors[colorIndex];
             
             // 创建颜色-文字显示项
@@ -248,6 +263,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const colorIndicator = document.createElement('div');
             colorIndicator.className = 'color-indicator';
             colorIndicator.style.background = color;
+            colorIndicator.style.width = '20px';
+            colorIndicator.style.height = '20px';
+            colorIndicator.style.display = 'inline-block';
+            colorIndicator.style.marginRight = '10px';
             
             // 创建文字显示
             const textSpan = document.createElement('span');
@@ -260,11 +279,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 初始化转盘 - 确保颜色正确应用和分布均匀
+    // 初始化转盘 - 确保颜色正确应用和扇形完全正常显示
     function initWheel() {
         const segments = document.querySelectorAll('.wheel-segment');
         const segmentCount = segments.length;
         const segmentAngle = 360 / segmentCount;
+        const wheelRadius = 200; // 转盘半径，与CSS中的400px宽度对应
         
         // 防止转盘条目过少
         if (segmentCount < 2) {
@@ -274,42 +294,70 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 设置每个扇形的角度和样式
         segments.forEach((segment, index) => {
-            // 计算扇形的旋转角度
-            const angle = index * segmentAngle;
+            // 重置样式，移除CSS中可能冲突的设置
+            segment.style.cssText = '';
             
-            // 设置扇形样式
-            segment.style.transform = `rotate(${angle}deg)`;
-            segment.style.transformOrigin = 'bottom center';
-            segment.style.height = '180px';
-            segment.style.width = '400px';
-            segment.style.borderTopLeftRadius = '100%';
-            segment.style.borderTopRightRadius = '100%';
+            // 计算扇形的起始和结束角度
+            const startAngle = index * segmentAngle;
+            const endAngle = startAngle + segmentAngle;
+            
+            // 将角度转换为弧度
+            const startRad = startAngle * Math.PI / 180;
+            const endRad = endAngle * Math.PI / 180;
+            
+            // 计算扇形的四个顶点坐标
+            const centerX = 50;
+            const centerY = 50;
+            
+            // 计算扇形外边缘的两个点坐标
+            const startX = centerX + 50 * Math.cos(startRad);
+            const startY = centerY + 50 * Math.sin(startRad);
+            const endX = centerX + 50 * Math.cos(endRad);
+            const endY = centerY + 50 * Math.sin(endRad);
+            
+            // 创建精确的扇形路径
+            let arcSweep = endAngle - startAngle <= 180 ? '0' : '1';
+            const clipPath = `polygon(
+                ${centerX}% ${centerY}%,
+                ${startX}% ${startY}%,
+                ${endX}% ${endY}%
+            )`;
+            
+            // 设置扇形样式 - 使用精确的多边形路径创建扇形
             segment.style.position = 'absolute';
-            segment.style.bottom = '0';
-            segment.style.left = '50%';
-            segment.style.transformTranslate = '-50%';
-            segment.style.display = 'flex';
-            segment.style.justifyContent = 'center';
-            segment.style.alignItems = 'flex-start';
-            segment.style.paddingTop = '10px';
-            segment.style.fontWeight = 'bold';
-            segment.style.color = 'white';
-            segment.style.textShadow = '0 0 2px rgba(0,0,0,0.5)';
+            segment.style.width = '100%';
+            segment.style.height = '100%';
+            segment.style.clipPath = clipPath;
+            segment.style.transformOrigin = 'center';
             
-            // 应用颜色
-            const colorIndex = index % colors.length;
-            segment.style.background = colors[colorIndex];
+            // 优化的颜色分配算法
+            const step = Math.max(1, Math.floor(colors.length / segmentCount));
+            const colorIndex = (index * step) % colors.length;
+            segment.style.backgroundColor = colors[colorIndex];
             
-            // 调整文字方向（针对垂直显示）
+            // 调整文字样式，确保文字在扇形内部正确显示
             const text = segment.querySelector('span');
             if (text) {
-                // 调整文字的位置和旋转，使其在扇形中正确显示
-                text.style.transform = `rotate(${-angle}deg)`;
+                // 计算文字的放置角度（扇形的中间角度）
+                const textAngle = startAngle + segmentAngle / 2;
+                const textRad = textAngle * Math.PI / 180;
+                
+                // 计算文字距离中心的位置
+                const textRadius = 0.6; // 文字距离中心的比例（0-1之间）
+                const textX = centerX + 50 * textRadius * Math.cos(textRad);
+                const textY = centerY + 50 * textRadius * Math.sin(textRad);
+                
+                // 设置文字样式和位置
                 text.style.position = 'absolute';
-                text.style.top = '20px';
-                text.style.width = '80px';
+                text.style.width = 'auto';
                 text.style.textAlign = 'center';
                 text.style.fontSize = '14px';
+                text.style.fontWeight = 'bold';
+                text.style.color = 'white';
+                text.style.textShadow = '0 0 2px rgba(0,0,0,0.5)';
+                text.style.left = `${textX}%`;
+                text.style.top = `${textY}%`;
+                text.style.transform = 'translate(-50%, -50%)';
             }
         });
         
@@ -349,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 重置过渡效果，避免影响后续操作
             wheel.style.transition = 'none';
             
-            // 获取选中的食物
+            // 获取选中的食物 - 确保索引计算正确
             const selectedFood = segments[randomSegment].querySelector('span').textContent;
             resultText.textContent = `恭喜你，今天吃${selectedFood}！`;
         }, 5000);
@@ -437,15 +485,32 @@ document.addEventListener('DOMContentLoaded', function() {
         // 清空列表
         foodList.innerHTML = '';
         
-        // 获取所有食物
+        // 获取所有食物和颜色
         const segments = document.querySelectorAll('.wheel-segment');
+        const segmentColors = Array.from(segments).map(segment => {
+            // 获取扇形的背景色
+            return window.getComputedStyle(segment).backgroundColor;
+        });
         
         // 创建食物列表项
         segments.forEach((segment, index) => {
             const text = segment.querySelector('span').textContent;
             const listItem = document.createElement('div');
             listItem.className = 'food-list-item';
-            listItem.textContent = text;
+            
+            // 创建颜色指示器
+            const colorIndicator = document.createElement('div');
+            colorIndicator.className = 'food-color-indicator';
+            colorIndicator.style.backgroundColor = segmentColors[index];
+            
+            // 创建文本容器
+            const textContainer = document.createElement('div');
+            textContainer.textContent = text;
+            
+            // 组装列表项
+            listItem.appendChild(colorIndicator);
+            listItem.appendChild(textContainer);
+            
             listItem.addEventListener('click', function() {
                 // 移除其他项的选中状态
                 document.querySelectorAll('.food-list-item').forEach(item => {
@@ -455,9 +520,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 设置当前项为选中状态
                 this.classList.add('selected');
                 selectedFoodIndex = index;
+                
+                // 启用确认删除按钮
+                confirmDeleteBtn.disabled = false;
             });
             foodList.appendChild(listItem);
         });
+        
+        // 重置选中状态和禁用按钮
+        selectedFoodIndex = -1;
+        confirmDeleteBtn.disabled = true;
     }
     
     // 设置数据同步（定时检查云端数据更新）
