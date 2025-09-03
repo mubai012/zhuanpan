@@ -201,43 +201,85 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 修改初始化函数
+    // 在文件末尾修改初始化代码，替换当前的初始化逻辑
+    // 删除现有的初始化代码，替换为以下内容：
     function initApp() {
         try {
-            if (window.AV) {
-                loadFoodData()
-                    .then(savedFoods => {
-                        recreateWheelSegments(savedFoods);
-                        initWheel();
-                        setupDataSync(); // 设置数据同步
-                    })
-                    .catch(error => {
-                        console.error('加载数据失败:', error);
-                        // 回退到默认数据
-                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
-                        recreateWheelSegments(defaultFoods);
-                        initWheel();
-                    });
-            } else {
-                // 如果LeanCloud未初始化，使用localStorage
-                setTimeout(() => {
-                    const savedFoods = localStorage.getItem('foodItems');
-                    if (savedFoods) {
-                        recreateWheelSegments(JSON.parse(savedFoods));
-                    } else {
-                        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
-                        recreateWheelSegments(defaultFoods);
-                        localStorage.setItem('foodItems', JSON.stringify(defaultFoods));
-                    }
+            // 首先尝试从localStorage加载数据
+            const savedFoods = localStorage.getItem('foodItems');
+            if (savedFoods) {
+                try {
+                    const foods = JSON.parse(savedFoods);
+                    recreateWheelSegments(foods);
                     initWheel();
-                }, 0);
+                    resultText.textContent = '数据已从本地加载';
+                } catch (e) {
+                    console.error('解析本地数据失败:', e);
+                    // 如果解析失败，使用默认数据
+                    useDefaultFoods();
+                }
+            } else {
+                // 如果本地没有数据，使用默认数据
+                useDefaultFoods();
+            }
+            
+            // 仅当LeanCloud可用时，才尝试同步（可选）
+            if (window.AV) {
+                setupDataSync();
             }
         } catch (error) {
             console.error('应用初始化异常:', error);
-            const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
-            recreateWheelSegments(defaultFoods);
-            initWheel();
+            useDefaultFoods();
         }
     }
+    
+    // 使用默认食物数据的辅助函数
+    function useDefaultFoods() {
+        const defaultFoods = ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
+        recreateWheelSegments(defaultFoods);
+        initWheel();
+        saveFoodData(defaultFoods);
+        resultText.textContent = '使用默认食物数据';
+    }
+    
+    // 修改saveFoodData函数，确保localStorage保存可靠
+    function saveFoodData(foods) {
+        try {
+            // 优先确保保存到localStorage
+            localStorage.setItem('foodItems', JSON.stringify(foods));
+            console.log('数据已保存到localStorage:', foods);
+            
+            // 可选：如果LeanCloud可用，尝试保存
+            if (window.AV) {
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                query.limit(1);
+                
+                query.find().then(results => {
+                    let foodList;
+                    if (results.length > 0) {
+                        foodList = results[0];
+                    } else {
+                        foodList = new FoodList();
+                    }
+                    
+                    foodList.set('items', foods);
+                    return foodList.save();
+                }).then(saved => {
+                    console.log('数据已成功保存到LeanCloud', saved);
+                }).catch(error => {
+                    console.error('保存数据到LeanCloud失败:', error);
+                    // 注意：LeanCloud保存失败不应影响应用功能
+                });
+            }
+        } catch (error) {
+            console.error('保存数据异常:', error);
+            alert('保存数据失败，请检查浏览器存储权限');
+        }
+    }
+    
+    // 调用初始化函数
+    initApp();
     
     // 修改DOMContentLoaded事件监听器
     // 重新创建转盘的所有扇形
