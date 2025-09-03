@@ -40,31 +40,92 @@ document.addEventListener('DOMContentLoaded', function() {
         '#6c5ce7'  // 紫罗兰色
     ];
     
-    // 从localStorage加载食物数据
+    // 从LeanCloud加载食物数据
     function loadFoodData() {
-        try {
-            const savedFoods = localStorage.getItem('foodItems');
-            if (savedFoods) {
-                try {
-                    const foods = JSON.parse(savedFoods);
-                    console.log('数据已从本地加载:', foods);
-                    return foods;
-                } catch (e) {
-                    console.error('解析本地数据失败:', e);
-                    // 如果解析失败，使用默认数据
-                    return getDefaultFoods();
+        return new Promise((resolve, reject) => {
+            try {
+                // 定义FoodList类（如果尚未定义）
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                
+                // 按更新时间排序，获取最新的一条数据
+                query.descending('updatedAt');
+                query.limit(1);
+                
+                query.find().then(results => {
+                    if (results.length > 0) {
+                        const foodData = results[0];
+                        const foods = foodData.get('foods') || [];
+                        console.log('数据已从LeanCloud加载:', foods);
+                        
+                        // 同时保存到localStorage作为备份
+                        localStorage.setItem('foodItems', JSON.stringify(foods));
+                        resolve(foods);
+                    } else {
+                        // 如果云端没有数据，尝试从localStorage加载
+                        console.log('云端无数据，尝试从本地加载');
+                        const savedFoods = localStorage.getItem('foodItems');
+                        if (savedFoods) {
+                            try {
+                                const foods = JSON.parse(savedFoods);
+                                console.log('数据已从本地加载:', foods);
+                                resolve(foods);
+                            } catch (e) {
+                                console.error('解析本地数据失败:', e);
+                                // 如果解析失败，使用默认数据
+                                const defaultFoods = getDefaultFoods();
+                                resolve(defaultFoods);
+                            }
+                        } else {
+                            // 如果本地也没有数据，使用默认数据
+                            const defaultFoods = getDefaultFoods();
+                            resolve(defaultFoods);
+                        }
+                    }
+                }).catch(error => {
+                    console.error('从LeanCloud加载数据失败:', error);
+                    // 加载失败时，尝试从localStorage加载
+                    const savedFoods = localStorage.getItem('foodItems');
+                    if (savedFoods) {
+                        try {
+                            const foods = JSON.parse(savedFoods);
+                            console.log('数据已从本地加载(LeanCloud失败回退):', foods);
+                            resolve(foods);
+                        } catch (e) {
+                            console.error('解析本地数据失败:', e);
+                            // 如果解析失败，使用默认数据
+                            const defaultFoods = getDefaultFoods();
+                            resolve(defaultFoods);
+                        }
+                    } else {
+                        // 如果本地也没有数据，使用默认数据
+                        const defaultFoods = getDefaultFoods();
+                        resolve(defaultFoods);
+                    }
+                });
+            } catch (error) {
+                console.error('加载数据异常:', error);
+                
+                // 加载失败时，尝试从localStorage加载
+                const savedFoods = localStorage.getItem('foodItems');
+                if (savedFoods) {
+                    try {
+                        const foods = JSON.parse(savedFoods);
+                        console.log('数据已从本地加载(异常回退):', foods);
+                        resolve(foods);
+                    } catch (e) {
+                        console.error('解析本地数据失败:', e);
+                        // 如果解析失败，使用默认数据
+                        const defaultFoods = getDefaultFoods();
+                        resolve(defaultFoods);
+                    }
+                } else {
+                    // 如果本地也没有数据，使用默认数据
+                    const defaultFoods = getDefaultFoods();
+                    resolve(defaultFoods);
                 }
-            } else {
-                // 如果本地没有数据，使用默认数据
-                const defaultFoods = getDefaultFoods();
-                saveFoodData(defaultFoods);
-                return defaultFoods;
             }
-        } catch (error) {
-            console.error('加载数据异常:', error);
-            alert('加载数据失败，请检查浏览器存储权限');
-            return getDefaultFoods();
-        }
+        });
     }
     
     // 获取默认食物数据
@@ -72,14 +133,64 @@ document.addEventListener('DOMContentLoaded', function() {
         return ['火锅', '烧烤', '炒菜', '汉堡', '寿司', '麻辣烫', '串', '方便面'];
     }
     
-    // 保存食物数据到localStorage
+    // 保存食物数据到localStorage和LeanCloud
     function saveFoodData(foods) {
         try {
+            // 保存到localStorage
             localStorage.setItem('foodItems', JSON.stringify(foods));
             console.log('数据已保存到localStorage:', foods);
+            
+            // 尝试保存到LeanCloud
+            try {
+                const FoodList = AV.Object.extend('FoodList');
+                
+                // 先查询是否已存在数据
+                const query = new AV.Query(FoodList);
+                query.descending('updatedAt');
+                query.limit(1);
+                
+                query.find().then(results => {
+                    if (results.length > 0) {
+                        // 如果存在数据，更新现有数据
+                        const foodData = results[0];
+                        foodData.set('foods', foods);
+                        foodData.save().then(() => {
+                            console.log('数据已成功更新到LeanCloud');
+                        }).catch(error => {
+                            console.error('更新LeanCloud数据失败:', error);
+                            // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
+                        });
+                    } else {
+                        // 如果不存在数据，创建新数据
+                        const foodData = new FoodList();
+                        foodData.set('foods', foods);
+                        foodData.save().then(() => {
+                            console.log('数据已成功保存到LeanCloud');
+                        }).catch(error => {
+                            console.error('保存LeanCloud数据失败:', error);
+                            // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
+                        });
+                    }
+                }).catch(error => {
+                    console.error('查询LeanCloud数据失败:', error);
+                    // 尝试直接创建新数据
+                    const foodData = new FoodList();
+                    foodData.set('foods', foods);
+                    foodData.save().then(() => {
+                        console.log('数据已成功保存到LeanCloud');
+                    }).catch(error => {
+                        console.error('保存LeanCloud数据失败:', error);
+                        // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
+                    });
+                });
+            } catch (cloudError) {
+                console.error('LeanCloud保存异常:', cloudError);
+                // 这里不抛出异常，确保即使云端保存失败也不影响本地功能
+            }
         } catch (error) {
             console.error('保存数据异常:', error);
             alert('保存数据失败，请检查浏览器存储权限');
+            throw error; // 本地存储失败时抛出异常
         }
     }
     
@@ -148,294 +259,241 @@ document.addEventListener('DOMContentLoaded', function() {
         // 防止转盘条目过少
         if (segmentCount < 2) {
             resultText.textContent = '至少需要保留2个食物选项';
-            deleteFoodBtn.disabled = true;
-        } else {
-            deleteFoodBtn.disabled = false;
+            return;
         }
         
-        // 清空之前的样式
-        segments.forEach(segment => {
-            segment.style.transform = '';
-            segment.style.background = '';
-            segment.style.clipPath = '';
-        });
-        
-        // 正确设置每个扇形的角质和位置和颜色
+        // 设置每个扇形的角度和样式
         segments.forEach((segment, index) => {
-            // 计算每个扇形的起始角度
-            const startAngle = index * segmentAngle;
-            const endAngle = startAngle + segmentAngle;
-            const colorIndex = index % colors.length;
+            // 计算扇形的旋转角度
+            const angle = index * segmentAngle;
             
-            // 设置扇形的背景颜色
-            segment.style.background = colors[colorIndex];
+            // 设置扇形样式
+            segment.style.transform = `rotate(${angle}deg)`;
+            segment.style.transformOrigin = 'bottom center';
+            segment.style.height = '180px';
+            segment.style.width = '400px';
+            segment.style.borderTopLeftRadius = '100%';
+            segment.style.borderTopRightRadius = '100%';
             segment.style.position = 'absolute';
-            segment.style.width = '100%';
-            segment.style.height = '100%';
-            segment.style.borderRadius = '50%';
-            segment.style.transformOrigin = 'center';
-            segment.style.overflow = 'hidden';
+            segment.style.bottom = '0';
+            segment.style.left = '50%';
+            segment.style.transformTranslate = '-50%';
+            segment.style.display = 'flex';
+            segment.style.justifyContent = 'center';
+            segment.style.alignItems = 'flex-start';
+            segment.style.paddingTop = '10px';
+            segment.style.fontWeight = 'bold';
+            segment.style.color = 'white';
+            segment.style.textShadow = '0 0 2px rgba(0,0,0,0.5)';
             
-            // 使用clip-path创建扇形
-            const startRad = (startAngle - 90) * Math.PI / 180;
-            const endRad = (endAngle - 90) * Math.PI / 180;
+            // 应用颜色
+            const colorIndex = index % colors.length;
+            segment.style.background = colors[colorIndex];
             
-            // 计算扇形的路径
-            let clipPath = '';
-            clipPath += 'polygon(';
-            clipPath += '50% 50%,'; // 中心
-            
-            // 为了确保扇形边缘平滑，我们使用多个点来绘制弧线
-            const arcPoints = 10;
-            for (let i = 0; i <= arcPoints; i++) {
-                const angle = startAngle + (endAngle - startAngle) * (i / arcPoints);
-                const rad = (angle - 90) * Math.PI / 180;
-                const x = 50 + 50 * Math.cos(rad);
-                const y = 50 + 50 * Math.sin(rad);
-                clipPath += `${x}% ${y}%,`;
+            // 调整文字方向（针对垂直显示）
+            const text = segment.querySelector('span');
+            if (text) {
+                // 调整文字的位置和旋转，使其在扇形中正确显示
+                text.style.transform = `rotate(${-angle}deg)`;
+                text.style.position = 'absolute';
+                text.style.top = '20px';
+                text.style.width = '80px';
+                text.style.textAlign = 'center';
+                text.style.fontSize = '14px';
             }
-            
-            clipPath = clipPath.slice(0, -1); // 移除最后一个逗号
-            clipPath += ')';
-            
-            // 应用clip-path
-            segment.style.clipPath = clipPath;
-            
-            // 处理文字元素
-            const textElement = segment.querySelector('span') || document.createElement('span');
-            if (!segment.querySelector('span')) {
-                textElement.textContent = segment.textContent.trim();
-                segment.textContent = '';
-                segment.appendChild(textElement);
-            }
-            
-            // 确保文字正确显示在扇形中心
-            const textAngle = startAngle + segmentAngle / 2;
-            
-            // 设置文字样式
-            textElement.style.position = 'absolute';
-            textElement.style.top = '50%';
-            textElement.style.left = '50%';
-            textElement.style.transform = `translate(-50%, -50%) rotate(${textAngle}deg)`;
-            textElement.style.width = '70%';
-            textElement.style.textAlign = 'center';
-            textElement.style.color = 'white';
-            textElement.style.fontWeight = 'bold';
-            textElement.style.fontSize = '1rem';
-            textElement.style.whiteSpace = 'nowrap';
-            textElement.style.textShadow = '1px 1px 2px rgba(0, 0, 0, 0.3)';
         });
         
         // 更新右侧颜色-文字对应显示
         updateColorTextDisplay();
-        
-        return { segments, segmentCount, segmentAngle };
     }
     
-    // 旋转转盘函数 - 确保指针指向与结果完全匹配
+    // 旋转转盘
     function spinWheel() {
         if (spinning) return;
         
         spinning = true;
-        spinBtn.disabled = true;
-        resultText.textContent = '转盘旋转中...';
+        const segments = document.querySelectorAll('.wheel-segment');
+        const segmentCount = segments.length;
         
-        // 重新获取最新的扇形信息
-        const currentSegments = document.querySelectorAll('.wheel-segment');
-        const currentSegmentCount = currentSegments.length;
-        const currentSegmentAngle = 360 / currentSegmentCount;
-        
-        // 随机选择一个扇形作为最终结果（确保概率均等）
-        const randomIndex = Math.floor(Math.random() * currentSegmentCount);
-        
-        // 计算需要旋转的总角度（5-10圈 + 目标位置）
-        const fullSpins = Math.floor(Math.random() * 6) + 5; // 5-10圈
-        
-        // 计算目标角度，确保指针精确指向所选扇形的中心位置
-        const targetAngle = 360 * fullSpins - (randomIndex * currentSegmentAngle + currentSegmentAngle / 2);
-        
-        // 设置过渡效果
-        const spinDuration = fullSpins * 0.6; // 根据圈数调整时间
-        wheel.style.transition = `transform ${spinDuration}s cubic-bezier(0.2, 0.8, 0.2, 1)`;
-        wheel.style.transform = `rotate(${targetAngle}deg)`;
-        
-        // 显示结果
-        setTimeout(() => {
-            const selectedFood = currentSegments[randomIndex].querySelector('span') ? 
-                               currentSegments[randomIndex].querySelector('span').textContent : 
-                               currentSegments[randomIndex].textContent;
-            
-            resultText.textContent = `恭喜！今天吃：${selectedFood}`;
-            
+        // 防止转盘条目过少
+        if (segmentCount < 2) {
+            resultText.textContent = '至少需要保留2个食物选项';
             spinning = false;
-            spinBtn.disabled = false;
-        }, spinDuration * 1000);
-    }
-    
-    // 添加食物函数
-    function addFood(foodName) {
-        if (!foodName.trim()) {
-            alert('请输入有效的食物名称');
             return;
         }
         
-        // 检测是否存在重复食物（不区分大小写）
-        const existingSegments = document.querySelectorAll('.wheel-segment');
-        const trimmedFoodName = foodName.trim();
+        // 计算旋转角度（多圈+随机角度）
+        const spins = 5 + Math.floor(Math.random() * 5); // 5-9圈
+        const randomSegment = Math.floor(Math.random() * segmentCount);
+        const segmentAngle = 360 / segmentCount;
+        const targetAngle = spins * 360 + randomSegment * segmentAngle;
         
-        for (const segment of existingSegments) {
-            const segmentText = segment.querySelector('span') ? 
-                          segment.querySelector('span').textContent.trim() : 
-                          segment.textContent.trim();
+        // 添加过渡效果
+        wheel.style.transition = 'transform 5s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        wheel.style.transform = `rotate(${targetAngle}deg)`;
+        
+        // 等待旋转结束后显示结果
+        setTimeout(() => {
+            spinning = false;
             
-            if (segmentText.toLowerCase() === trimmedFoodName.toLowerCase()) {
-                alert(`"${trimmedFoodName}" 已经存在于转盘中了！`);
-                return;
+            // 重置过渡效果，避免影响后续操作
+            wheel.style.transition = 'none';
+            
+            // 获取选中的食物
+            const selectedFood = segments[randomSegment].querySelector('span').textContent;
+            resultText.textContent = `恭喜你，今天吃${selectedFood}！`;
+        }, 5000);
+    }
+    
+    // 添加食物
+    function addFood(foodName) {
+        // 验证输入
+        if (!foodName || foodName.trim() === '') {
+            alert('请输入食物名称');
+            return false;
+        }
+        
+        foodName = foodName.trim();
+        
+        // 检查是否已存在该食物
+        const segments = document.querySelectorAll('.wheel-segment');
+        for (let i = 0; i < segments.length; i++) {
+            const text = segments[i].querySelector('span').textContent;
+            if (text === foodName) {
+                alert('该食物已存在');
+                return false;
             }
         }
         
-        // 创建新的扇形元素并添加文字容器
+        // 创建新的扇形
+        const wheelCenter = document.querySelector('.wheel-center');
         const newSegment = document.createElement('div');
         newSegment.classList.add('wheel-segment');
         const textSpan = document.createElement('span');
-        textSpan.textContent = trimmedFoodName;
+        textSpan.textContent = foodName;
         newSegment.appendChild(textSpan);
-        
-        // 插入到转盘中心元素之前
-        const wheelCenter = document.querySelector('.wheel-center');
         wheel.insertBefore(newSegment, wheelCenter);
         
-        // 重新初始化转盘，确保所有扇形均匀分布并正确应用颜色
-        ({ segments, segmentCount, segmentAngle } = initWheel());
+        // 重新初始化转盘
+        initWheel();
         
-        // 保存食物数据到localStorage
-        const foodTexts = Array.from(document.querySelectorAll('.wheel-segment')).map(segment => {
-            return segment.querySelector('span').textContent;
-        });
-        saveFoodData(foodTexts);
+        // 保存更新后的数据
+        const foods = Array.from(document.querySelectorAll('.wheel-segment span')).map(span => span.textContent);
+        saveFoodData(foods);
         
-        // 关闭模态框并清空输入
-        modal.style.display = 'none';
+        // 清空输入框并关闭模态框
         foodInput.value = '';
+        modal.style.display = 'none';
         
-        // 显示添加成功信息
-        resultText.textContent = `成功添加：${trimmedFoodName}`;
+        return true;
     }
     
-    // 删除食物函数
-    function deleteFood(index) {
-        if (index < 0) return;
+    // 删除食物
+    function deleteFood() {
+        if (selectedFoodIndex === -1) {
+            alert('请选择要删除的食物');
+            return;
+        }
         
         const segments = document.querySelectorAll('.wheel-segment');
-        if (index >= segments.length) return;
         
-        // 获取要删除的食物名称
-        const foodName = segments[index].querySelector('span') ? 
-                        segments[index].querySelector('span').textContent : 
-                        segments[index].textContent;
+        // 确保至少保留2个食物
+        if (segments.length <= 2) {
+            alert('至少需要保留2个食物选项');
+            deleteModal.style.display = 'none';
+            return;
+        }
         
-        // 删除该扇形元素
-        segments[index].remove();
+        // 删除选中的扇形
+        segments[selectedFoodIndex].remove();
         
         // 重新初始化转盘
-        ({ segments, segmentCount, segmentAngle } = initWheel());
+        initWheel();
         
-        // 保存更新后的食物数据到localStorage
-        const foodTexts = Array.from(document.querySelectorAll('.wheel-segment')).map(segment => {
-            return segment.querySelector('span').textContent;
-        });
-        saveFoodData(foodTexts);
+        // 保存更新后的数据
+        const foods = Array.from(document.querySelectorAll('.wheel-segment span')).map(span => span.textContent);
+        saveFoodData(foods);
         
-        // 关闭模态框
+        // 关闭模态框并重置选择
         deleteModal.style.display = 'none';
-        
-        // 显示删除成功信息
-        resultText.textContent = `成功删除：${foodName}`;
-        
-        // 重置选中状态
         selectedFoodIndex = -1;
+        
+        // 显示操作成功消息
+        resultText.textContent = '食物已成功删除';
     }
     
-    // 显示食物列表
+    // 显示食物列表（用于删除操作）
     function showFoodList() {
+        // 清空列表
         foodList.innerHTML = '';
+        
+        // 获取所有食物
         const segments = document.querySelectorAll('.wheel-segment');
         
+        // 创建食物列表项
         segments.forEach((segment, index) => {
-            const text = segment.querySelector('span') ? 
-                        segment.querySelector('span').textContent : 
-                        segment.textContent;
-            
-            const colorIndex = index % colors.length;
-            const color = colors[colorIndex];
-            
-            const foodItem = document.createElement('div');
-            foodItem.className = 'food-item';
-            foodItem.dataset.index = index;
-            
-            const colorIndicator = document.createElement('div');
-            colorIndicator.className = 'food-color-indicator';
-            colorIndicator.style.backgroundColor = color;
-            
-            const foodText = document.createElement('span');
-            foodText.textContent = text;
-            
-            foodItem.appendChild(colorIndicator);
-            foodItem.appendChild(foodText);
-            foodList.appendChild(foodItem);
-            
-            // 添加点击事件
-            foodItem.addEventListener('click', function() {
+            const text = segment.querySelector('span').textContent;
+            const listItem = document.createElement('div');
+            listItem.className = 'food-list-item';
+            listItem.textContent = text;
+            listItem.addEventListener('click', function() {
                 // 移除其他项的选中状态
-                document.querySelectorAll('.food-item').forEach(item => {
+                document.querySelectorAll('.food-list-item').forEach(item => {
                     item.classList.remove('selected');
                 });
                 
-                // 添加当前项的选中状态
+                // 设置当前项为选中状态
                 this.classList.add('selected');
-                selectedFoodIndex = parseInt(this.dataset.index);
-                confirmDeleteBtn.disabled = false;
+                selectedFoodIndex = index;
             });
+            foodList.appendChild(listItem);
         });
-        
-        // 重置选中状态
-        selectedFoodIndex = -1;
-        confirmDeleteBtn.disabled = true;
+    }
+    
+    // 设置数据同步（定时检查云端数据更新）
+    function setupDataSync() {
+        // 每30秒检查一次云端数据
+        setInterval(() => {
+            // 仅在非旋转状态下检查数据更新
+            if (!spinning) {
+                const FoodList = AV.Object.extend('FoodList');
+                const query = new AV.Query(FoodList);
+                query.descending('updatedAt');
+                query.limit(1);
+                
+                query.find().then(results => {
+                    if (results.length > 0) {
+                        const cloudFoods = results[0].get('foods') || [];
+                        const localFoods = Array.from(document.querySelectorAll('.wheel-segment span')).map(span => span.textContent);
+                        
+                        // 比较云端数据和本地数据是否相同
+                        if (JSON.stringify(cloudFoods) !== JSON.stringify(localFoods)) {
+                            console.log('检测到云端数据更新，正在同步...');
+                            recreateWheelSegments(cloudFoods);
+                            initWheel();
+                            localStorage.setItem('foodItems', JSON.stringify(cloudFoods));
+                            resultText.textContent = '数据已从云端同步';
+                        }
+                    }
+                }).catch(error => {
+                    console.error('同步数据失败:', error);
+                });
+            }
+        }, 30000); // 30秒
     }
     
     // 事件监听器
     spinBtn.addEventListener('click', spinWheel);
     
-    // 添加食物按钮事件
+    // 添加食物按钮
     addFoodBtn.addEventListener('click', function() {
         modal.style.display = 'block';
-    });
-    
-    // 删除食物按钮事件
-    deleteFoodBtn.addEventListener('click', function() {
-        showFoodList();
-        deleteModal.style.display = 'block';
+        foodInput.focus();
     });
     
     // 关闭模态框
     closeModal.addEventListener('click', function() {
         modal.style.display = 'none';
-        foodInput.value = '';
-    });
-    
-    // 关闭删除模态框
-    closeDeleteModal.addEventListener('click', function() {
-        deleteModal.style.display = 'none';
-    });
-    
-    // 点击模态框外部关闭
-    window.addEventListener('click', function(event) {
-        if (event.target === modal) {
-            modal.style.display = 'none';
-            foodInput.value = '';
-        } else if (event.target === deleteModal) {
-            deleteModal.style.display = 'none';
-        }
     });
     
     // 确认添加食物
@@ -443,9 +501,28 @@ document.addEventListener('DOMContentLoaded', function() {
         addFood(foodInput.value);
     });
     
+    // 删除食物按钮
+    deleteFoodBtn.addEventListener('click', function() {
+        showFoodList();
+        deleteModal.style.display = 'block';
+    });
+    
+    // 关闭删除模态框
+    closeDeleteModal.addEventListener('click', function() {
+        deleteModal.style.display = 'none';
+    });
+    
     // 确认删除食物
-    confirmDeleteBtn.addEventListener('click', function() {
-        deleteFood(selectedFoodIndex);
+    confirmDeleteBtn.addEventListener('click', deleteFood);
+    
+    // 点击模态框外部关闭
+    window.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+        if (event.target === deleteModal) {
+            deleteModal.style.display = 'none';
+        }
     });
     
     // 按Enter键添加食物
@@ -455,13 +532,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 初始化数据和转盘
+    // 初始化应用
     function initApp() {
         try {
-            const savedFoods = loadFoodData();
-            recreateWheelSegments(savedFoods);
-            initWheel();
-            resultText.textContent = '数据已成功加载';
+            loadFoodData().then(savedFoods => {
+                recreateWheelSegments(savedFoods);
+                initWheel();
+                resultText.textContent = '数据已成功加载';
+                
+                // 设置数据同步
+                setupDataSync();
+            }).catch(error => {
+                console.error('加载数据失败:', error);
+                alert('加载数据失败: ' + error.message);
+                
+                // 使用默认数据初始化
+                const defaultFoods = getDefaultFoods();
+                recreateWheelSegments(defaultFoods);
+                initWheel();
+                saveFoodData(defaultFoods);
+            });
         } catch (error) {
             console.error('应用初始化异常:', error);
             alert('初始化失败: ' + error.message);
